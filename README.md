@@ -27,3 +27,4 @@ This project is licensed under MIT license
 # Dependencies (included in repo)
 - JSON parser is licensed under MIT license
 - Eigen library is licensed under MPL2 license (used for matrix inversion)
+- Args parser from stackoverflow by 0x90 and iain
