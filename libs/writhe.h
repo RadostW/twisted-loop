@@ -12,6 +12,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "point.h"
+#include "splines.h"
 
 namespace wr
 {
@@ -79,6 +80,31 @@ double writhe(Curve curve)
 
     return accum / (2*M_PI);    
    
+}
+
+
+Curve resample(Curve c, int pts)
+{
+    sp::spline gammaX, gammaY, gammaZ;
+    int n = c.size();
+    std::vector<double> xi(n),yi(n),zi(n);
+    for(int i=0;i<n;i++)
+    {
+        xi[i] = c.at(i).x;
+        yi[i] = c.at(i).y;
+        zi[i] = c.at(i).z;
+    }
+    gammaX.setPoints(xi);
+    gammaY.setPoints(yi);
+    gammaZ.setPoints(zi);
+
+    auto ret = wr::Curve(pts);
+    double dx = 1.0/pts;
+    for(int i=0; i < pts; i++)
+    {
+        ret.at(i) = Point(gammaX(dx*i),gammaY(dx*i),gammaZ(dx*i));
+    }
+    return ret;
 }
 
 }

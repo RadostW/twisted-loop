@@ -12,7 +12,7 @@
 #include <cmath>
 #include <math.h>
 #include <iostream>
-#include "external/Eigen/Dense"
+#include "../external/Eigen/Dense"
 
 namespace sp
 {
