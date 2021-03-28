@@ -170,7 +170,7 @@ namespace wr
         double squaredCurvature = totalSquaredCurvature();
         double Tw = Link - writhe();
         double TwistDensity = 2*M_PI*Tw / curveLength;
-        double contact = nearNeighbours(Radius);
+        double contact = nearNeighbours(2*Radius);
         double inverseDist = inverseDistances();
 
         double lengthPenalty = 8000;

@@ -29,11 +29,11 @@ int main(int argc, char **argv)
         printf(" *Find minimum energy of given configuration:\n");
         printf(" main.exe -L LINK -r THICKNESS [-l LENGTH] [-omega OMEGA] [-pts POINTS] [-tmax TMAX] [-o OUTPUT] [-v]\n");
         printf("\n");
-        printf("  Defaults: LENGTH=1, OMEGA=1.5, POINTS=14, TMAX=5000, OUTPUT=out.json\n");
+        printf("  Defaults: LENGTH=1, OMEGA=0.66, POINTS=14, TMAX=5000, OUTPUT=out.json\n");
         printf("  -L LINK: linking number\n");
         printf("  -r THICKESS: cross-sectional radius of the beam\n");
         printf("  -l LENGTH: total length of the centreline\n");
-        printf("  -omega OMEGA: dimensionless ratio of bending to twisting (for full, circular beam 1.5)\n");
+        printf("  -omega OMEGA: dimensionless ratio of bending to twisting (for full, circular beam 0.66(6))\n");
         printf("  -pts POINTS: number of nodal points of cubic spline approximating the curve\n");
         printf("  -tmax TMAX: number of iterations in monte carlo\n");
         printf("  -v: include in output energy and writhe in all iterations\n");
@@ -46,7 +46,7 @@ int main(int argc, char **argv)
             double ParamLink = atof(input.getCmdOption("-L").c_str());
             double ParamRadius = atof(input.getCmdOption("-r").c_str());
             double ParamLength = 1.0;
-            double ParamOmega = 1.5;
+            double ParamOmega = 0.66;
             int ParamPoints = 14;
             int ParamTMax = 5000;
             std::string ParamOutpath = "out.json";
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
                 wr::Curve ProposeC;
                 for(int rep=0;rep<30;rep++)
                 {
-                    double step=0.2+0.4*(ParamTMax-t)/ParamTMax;
+                    double step=0.05+0.4*(ParamTMax-t)/ParamTMax;
                     ProposeC = wr::nudge(c,ParamRadius*step); // change c a little
                     if(t%20 > 2)
                     {
@@ -85,16 +85,19 @@ int main(int argc, char **argv)
                         double repulsion=0.5*(ParamTMax-t)/ParamTMax;
                         LocalBestScore = wr::energy(LocalBestC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion);
                         Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion);
-                    }
+                    }    
 
                     if(Score < LocalBestScore)
                     {
-                        if(fabs(wr::writhe(c) - wr::writhe(ProposeC) ) < 0.5 ) // Prevent tunelling
+                        if(fabs(wr::writhe(resample(c,50)) - wr::writhe(resample(ProposeC,50)) ) > 0.5 ) // Prevent tunelling
                         {
-                            LocalBestC = ProposeC;
-                            LocalBestScore = Score;
-                            c = ProposeC;
+                            continue;
                         }
+
+
+                        LocalBestC = ProposeC;
+                        LocalBestScore = Score;
+                        c = ProposeC;
                     }
                 }
                 if(t%10==0)
@@ -102,25 +105,32 @@ int main(int argc, char **argv)
                     MovieFrames.push_back(resample(c,50));
                 }
 
-                printf("%d writhe:%lf ene:%4.3e global:%4.3e\n",t,wr::writhe(c),Score,GlobalBestScore);
+                printf("%d writhe:%lf ene:%4.3e global:%4.3e\n",t,wr::writhe(resample(c,50)),Score,GlobalBestScore);
 
                 if(Score < GlobalBestScore)
                 {
                     GlobalBestC = ProposeC;
                     GlobalBestScore = Score;
-                    WinnerWr.push_back(wr::writhe(GlobalBestC));
+                    WinnerWr.push_back(wr::writhe(resample(GlobalBestC,50)));
                     WinnerScores.push_back(GlobalBestScore);
                     c = ProposeC;
                 }
             }
 
             json j;
+            j["link"] = ParamLink;
+            j["radius"] = ParamRadius;
+            j["length"] = ParamLength;
+            j["omega"] = ParamOmega;
+            j["points"] = ParamPoints;
+            j["tmax"] = ParamTMax;
+
             j["writhes"] = WinnerWr;
             j["scores"]  = WinnerScores;
             j["winner"] = GlobalBestC;
             j["movie"] = MovieFrames;
 
-            std::cout<<j<<std::endl;
+            std::cout<<j["writhes"]<<std::endl;
 
             std::ofstream myfile;
             myfile.open (ParamOutpath);
