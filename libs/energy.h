@@ -9,7 +9,7 @@ namespace wr
 
     sp::spline gammaX, gammaY, gammaZ;
     wr::Curve wrSplineCurve;
-    const int wrpoints = 50; // Number of subsampling points for writhe calc.
+    const int wrpoints = 100; // Number of subsampling points for writhe calc.
 
     wr::Curve nearSplineCurve;
     const int nearSamplingN = 1000; // Number of subsampling points for steric interactions
@@ -163,7 +163,7 @@ namespace wr
 
 
 
-    double energy(Curve c,double Link,double Radius,double Length,double Omega,double Electrostatic)
+    double energy(Curve c,double Link,double Radius,double Length,double Omega,double Electrostatic,double SoftContact)
     {
         curveInit(c);
         double curveLength = totalLength();
@@ -171,11 +171,15 @@ namespace wr
         double Tw = Link - writhe();
         double TwistDensity = 2*M_PI*Tw / curveLength;
         double contact = nearNeighbours(2*Radius);
+        double softContact = nearNeighbours(5*Radius);
         double inverseDist = inverseDistances();
 
         double lengthPenalty = 8000;
         double contactPenalty = 10000;
-        return lengthPenalty*(curveLength-Length)*(curveLength-Length) + squaredCurvature + curveLength*TwistDensity*TwistDensity*Omega + contactPenalty*contact + Electrostatic * inverseDist;
+
+        return lengthPenalty*(curveLength-Length)*(curveLength-Length) + squaredCurvature + 
+                curveLength*TwistDensity*TwistDensity*Omega + contactPenalty*contact +
+                Electrostatic * inverseDist + softContact*SoftContact;
     }
 
     Curve symmetrized(Curve c);

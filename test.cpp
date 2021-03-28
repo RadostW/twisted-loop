@@ -56,11 +56,11 @@ int main(int argc, char **argv)
             if(input.cmdOptionExists("-tmax"))ParamTMax = atoi(input.getCmdOption("-tmax").c_str());
             if(input.cmdOptionExists("-o"))ParamOutpath = input.getCmdOption("-o");
         
-            auto c = wr::getInitialCondition(ParamLink);
+            auto c = resample(wr::getInitialCondition(ParamLink),ParamPoints);
             auto GlobalBestC = c;
             auto LocalBestC = c;
-            double GlobalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0);
-            double LocalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0);
+            double GlobalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+            double LocalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
             double Score = 0;
 
             std::vector<double> WinnerWr;
@@ -69,27 +69,29 @@ int main(int argc, char **argv)
             WinnerWr.push_back(wr::writhe(c));
             WinnerScores.push_back(GlobalBestScore);
 
+            int WrithePoints = 100;
+
             for(int t=0;t<ParamTMax;t++)
             {
                 wr::Curve ProposeC;
                 for(int rep=0;rep<30;rep++)
                 {
-                    double step=0.05+0.4*(ParamTMax-t)/ParamTMax;
+                    double step=0.1+0.6*(std::max(0.66*ParamTMax-t,0.0))/ParamTMax;
                     ProposeC = wr::nudge(c,ParamRadius*step); // change c a little
                     if(t%20 > 2)
                     {
-                        Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,0);
+                        Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
                     }
                     else // Annealing
                     {
-                        double repulsion=0.5*(ParamTMax-t)/ParamTMax;
-                        LocalBestScore = wr::energy(LocalBestC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion);
-                        Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion);
+                        double repulsion=0.9*(std::max(0.66*ParamTMax-t,0.0))/ParamTMax;
+                        LocalBestScore = wr::energy(LocalBestC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion,100*repulsion);
+                        Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion,100*repulsion);
                     }    
 
                     if(Score < LocalBestScore)
                     {
-                        if(fabs(wr::writhe(resample(c,50)) - wr::writhe(resample(ProposeC,50)) ) > 0.5 ) // Prevent tunelling
+                        if(fabs(wr::writhe(resample(c,WrithePoints)) - wr::writhe(resample(ProposeC,WrithePoints)) ) > 0.5 ) // Prevent tunelling
                         {
                             continue;
                         }
@@ -102,16 +104,16 @@ int main(int argc, char **argv)
                 }
                 if(t%10==0)
                 {
-                    MovieFrames.push_back(resample(c,50));
+                    MovieFrames.push_back(resample(c,WrithePoints));
                 }
 
-                printf("%d writhe:%lf ene:%4.3e global:%4.3e\n",t,wr::writhe(resample(c,50)),Score,GlobalBestScore);
+                printf("%d writhe:%lf ene:%4.3e global:%4.3e\n",t,wr::writhe(resample(c,WrithePoints)),Score,GlobalBestScore);
 
                 if(Score < GlobalBestScore)
                 {
                     GlobalBestC = ProposeC;
                     GlobalBestScore = Score;
-                    WinnerWr.push_back(wr::writhe(resample(GlobalBestC,50)));
+                    WinnerWr.push_back(wr::writhe(resample(GlobalBestC,WrithePoints)));
                     WinnerScores.push_back(GlobalBestScore);
                     c = ProposeC;
                 }
