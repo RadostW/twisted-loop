@@ -9,10 +9,10 @@ namespace wr
 
     sp::spline gammaX, gammaY, gammaZ;
     wr::Curve wrSplineCurve;
-    const int wrpoints = 100; // Number of subsampling points for writhe calc.
+    const int wrpoints = 200; // Number of subsampling points for writhe calc.
 
     wr::Curve nearSplineCurve;
-    const int nearSamplingN = 1000; // Number of subsampling points for steric interactions
+    int nearSamplingN = 1000; // Number of subsampling points for steric interactions
 
     int splinePoints; // Stores number of points of initCurve
 
