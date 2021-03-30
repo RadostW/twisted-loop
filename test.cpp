@@ -48,11 +48,13 @@ int main(int argc, char **argv)
             double ParamLength = 1.0;
             double ParamOmega = 0.66;
             int ParamPoints = 14;
+            int ParamIntersectPoints = 1000;
             int ParamTMax = 5000;
             std::string ParamOutpath = "out.json";
             if(input.cmdOptionExists("-l"))ParamLength = atof(input.getCmdOption("-l").c_str());
             if(input.cmdOptionExists("-omega"))ParamOmega = atof(input.getCmdOption("-omega").c_str());
             if(input.cmdOptionExists("-pts"))ParamPoints = atoi(input.getCmdOption("-pts").c_str());
+            if(input.cmdOptionExists("-ipts"))ParamIntersectPoints = atoi(input.getCmdOption("-ipts").c_str());
             if(input.cmdOptionExists("-tmax"))ParamTMax = atoi(input.getCmdOption("-tmax").c_str());
             if(input.cmdOptionExists("-o"))ParamOutpath = input.getCmdOption("-o");
         
@@ -62,6 +64,7 @@ int main(int argc, char **argv)
             double GlobalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
             double LocalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
             double Score = 0;
+            wr::nearSamplingN = ParamIntersectPoints;
 
             std::vector<double> WinnerWr;
             std::vector<double> WinnerScores;
@@ -69,7 +72,7 @@ int main(int argc, char **argv)
             WinnerWr.push_back(wr::writhe(c));
             WinnerScores.push_back(GlobalBestScore);
 
-            int WrithePoints = 100;
+            int WrithePoints = 200;
 
             for(int t=0;t<ParamTMax;t++)
             {
@@ -147,11 +150,4 @@ int main(int argc, char **argv)
             return -1;
         }
     }
-
-   // std::vector<double> q;
-   // q.push_back(0.5);
-   // q.push_back(0.7);
-   // json j;
-  //  j["vec"] = c;
- //   std::cout << j;
 }
