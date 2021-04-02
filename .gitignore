@@ -1,3 +1,6 @@
+# Custom -- output files from the simulation
+out*.json
+
 # Prerequisites
 *.d
 
