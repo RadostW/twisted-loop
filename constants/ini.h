@@ -8,7 +8,10 @@ wr::Curve getInitialCondition(double link)
 {
     auto c = wr::Curve(15);
 
-    if(true) // High writhe init
+    bool HighWrInit = false;
+    bool LowWrInit = false;
+
+    if(HighWrInit) // High writhe init
     {
         auto c = wr::Curve(20);
         c[ 0  ]=wr::Point( 0,0,0.005674587872752547 );
@@ -33,8 +36,9 @@ wr::Curve getInitialCondition(double link)
         c[19  ]=wr::Point( -0.05422472243718961,-0.0033727394280070825,-0.0038854522678721626 );
         return c;
     }
-    else if(link < 1.875)
+    else if(LowWrInit || link < 1.875)
     {
+        //Low writhe init
         c[0]=wr::Point(0.,0.,0.1820694908908002);
         c[1]=wr::Point(0.07249260641999708,0.00809101247729739,0.16376108676623502);
         c[2]=wr::Point(0.12471906063910566,0.014194820862509904,0.12189575514685805);

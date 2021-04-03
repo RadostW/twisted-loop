@@ -19,6 +19,35 @@ namespace wr
 
 typedef std::vector<Point> Curve;
 
+Curve add(Curve a, Curve b)
+{
+    if(a.size()!=b.size())
+    {
+        throw -1;
+    }
+    else
+    {
+        int n=a.size();
+        Curve ret(n);
+        for(int i=0;i<n;i++)
+        {
+            ret[i] = a[i] + b[i];
+        }
+        return ret;
+    }
+}
+
+Curve scale(Curve a,double scale)
+{
+    int n=a.size();
+    Curve ret(n);
+    for(int i=0;i<n;i++)
+    {
+        ret[i] = a[i]*scale;
+    }
+    return ret;
+}
+
 // Based on algorithm:
 // https://en.wikipedia.org/wiki/Writhe#Numerically_approximating_the_Gauss_integral_for_writhe_of_a_curve_in_space
 double writhe(Curve curve)

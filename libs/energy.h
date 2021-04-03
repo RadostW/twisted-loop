@@ -171,7 +171,7 @@ namespace wr
         double Tw = Link - writhe();
         double TwistDensity = 2*M_PI*Tw / curveLength;
         double contact = nearNeighbours(2*Radius);
-        double softContact = nearNeighbours(5*Radius);
+        double softContact = 0; //nearNeighbours(5*Radius);
         double inverseDist = inverseDistances();
 
         double lengthPenalty = 8000;

@@ -1,6 +1,7 @@
 #include<stdio.h> // printf
 #include<iostream>
 #include<vector> 
+#include<utility> //pair
 #include<string>
 #include<fstream>
 
@@ -17,6 +18,11 @@ namespace wr {
         std::vector<double> tmp {p.x,p.y,p.z};
         j =  json(tmp);
     }
+}
+
+bool CompareSecond(std::pair<wr::Curve,double> l,std::pair<wr::Curve,double> r)
+{
+    return l.second < r.second;
 }
 
 int main(int argc, char **argv)
@@ -58,67 +64,207 @@ int main(int argc, char **argv)
             if(input.cmdOptionExists("-tmax"))ParamTMax = atoi(input.getCmdOption("-tmax").c_str());
             if(input.cmdOptionExists("-o"))ParamOutpath = input.getCmdOption("-o");
         
-            auto c = resample(wr::getInitialCondition(ParamLink),ParamPoints);
-            auto GlobalBestC = c;
-            auto LocalBestC = c;
-            double GlobalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
-            double LocalBestScore = wr::energy(c,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
-            double Score = 0;
+            auto InitialCurve = resample(wr::getInitialCondition(ParamLink),ParamPoints);
+            double BestScore = wr::energy(InitialCurve,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+            int SinceBestUpdate = 0;
             wr::nearSamplingN = ParamIntersectPoints;
 
+            if(ParamPoints%2!=0)
+            {
+                printf("Odd number of points currently not supported.\n");
+                printf("Set -pts POINTS to an even number\n");
+            }
+
+            int SimplexSize = 0;
+            std::vector< std::pair < wr::Curve , double > > Simplex(SimplexSize);
+
+            // Init locations
+            if(ParamPoints%4==0)
+            {
+                SimplexSize = 1 + 3*(ParamPoints/4 - 1) + 2;
+                Simplex = std::vector< std::pair < wr::Curve , double > >(SimplexSize);
+                for(int i=0;i<SimplexSize;i++)
+                {
+                    Simplex[i] = std::make_pair(InitialCurve,BestScore);
+                }
+
+                for(int i=0;i< 3*(ParamPoints/4 - 1);i++)
+                {
+                    int tmp = i%3;
+                    switch(tmp)
+                    {
+                        case 0:
+                            Simplex[1+i].first[1 + i/3].x += ParamRadius;                        
+                        break;
+                        case 1:
+                            Simplex[1+i].first[1 + i/3].y += ParamRadius;                        
+                        break;
+                        case 2:
+                            Simplex[1+i].first[1 + i/3].z += ParamRadius;                        
+                        break;
+                    }
+                    Simplex[1+i].first = nudge(Simplex[1+i].first,ParamRadius);
+                }
+                Simplex[SimplexSize-2].first[0].z += ParamRadius;
+                Simplex[SimplexSize-1].first[ParamPoints/4].x += ParamRadius;
+            }
+            else
+            {
+                SimplexSize = 1 + 3*(ParamPoints/4) + 1;
+                Simplex = std::vector< std::pair < wr::Curve , double > >(SimplexSize);
+                for(int i=0;i<SimplexSize;i++)
+                {
+                    Simplex[i] = std::make_pair(InitialCurve,BestScore);
+                }
+
+                for(int i=0;i< 3*(ParamPoints/4);i++)
+                {
+                    int tmp = i%3;
+                    switch(tmp)
+                    {
+                        case 0:
+                            Simplex[1+i].first[1 + i/3].x += ParamRadius;                        
+                        break;
+                        case 1:
+                            Simplex[1+i].first[1 + i/3].y += ParamRadius;                        
+                        break;
+                        case 2:
+                            Simplex[1+i].first[1 + i/3].z += ParamRadius;                        
+                        break;
+                    }
+                }
+                Simplex[SimplexSize-1].first[0].z += ParamRadius;
+            }
+
+            // Set energies of verticies
+            for(int i=0;i<SimplexSize;i++)
+            {
+                auto tmpc = symmetrized(Simplex[i].first);
+                double tmpe = wr::energy(tmpc,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+                Simplex[i] = std::make_pair(tmpc,tmpe);
+            }
+
+            if(input.cmdOptionExists("-v"))
+            {
+                json j2;
+                j2["simplex"]=Simplex;
+                std::ofstream myfile2;
+                myfile2.open ("simplex_init.json");
+                myfile2 << j2;
+                myfile2.close();
+            }
+
+            int WrithePoints = 50;
             std::vector<double> WinnerWr;
             std::vector<double> WinnerScores;
             std::vector<wr::Curve> MovieFrames;
-            WinnerWr.push_back(wr::writhe(c));
-            WinnerScores.push_back(GlobalBestScore);
+            WinnerWr.push_back(wr::writhe(resample(Simplex[0].first,WrithePoints)));
+            WinnerScores.push_back(BestScore);
 
-            int WrithePoints = 200;
+            double alpha=1.0;
+            double gamma=2.0;
+            double rho=0.5;
+            double sigma=0.5;
 
-            for(int t=0;t<ParamTMax;t++)
+            for(int t=0;t<ParamTMax*100;t++)
             {
-                wr::Curve ProposeC;
-                for(int rep=0;rep<30;rep++)
+                std::sort( Simplex.begin(), Simplex.end(), CompareSecond );
+
+                if(Simplex[0].second < BestScore)
                 {
-                    double step=0.1+0.6*(std::max(0.66*ParamTMax-t,0.0))/ParamTMax;
-                    ProposeC = wr::nudge(c,ParamRadius*step); // change c a little
-                    if(t%20 > 2)
+                    BestScore = Simplex[0].second;
+                    SinceBestUpdate = 0;
+                }
+                else
+                {
+                    SinceBestUpdate++;
+                    if(SinceBestUpdate > 300)
                     {
-                        Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
-                    }
-                    else // Annealing
-                    {
-                        double repulsion=0.9*(std::max(0.66*ParamTMax-t,0.0))/ParamTMax;
-                        LocalBestScore = wr::energy(LocalBestC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion,100*repulsion);
-                        Score = wr::energy(ProposeC,ParamLink,ParamRadius,ParamLength,ParamOmega,repulsion,100*repulsion);
-                    }    
-
-                    if(Score < LocalBestScore)
-                    {
-                        if(fabs(wr::writhe(resample(c,WrithePoints)) - wr::writhe(resample(ProposeC,WrithePoints)) ) > 0.5 ) // Prevent tunelling
-                        {
-                            continue;
-                        }
-
-
-                        LocalBestC = ProposeC;
-                        LocalBestScore = Score;
-                        c = ProposeC;
+                        break; //Stop optimizing
                     }
                 }
+
                 if(t%10==0)
                 {
-                    MovieFrames.push_back(resample(c,WrithePoints));
+                    MovieFrames.push_back(resample(Simplex[0].first,100));   
+                    double WritheTmp = wr::writhe(resample(Simplex[0].first,WrithePoints));
+                    double ScoreTmp = Simplex[0].second;
+                    WinnerWr.push_back(WritheTmp);
+                    WinnerScores.push_back(ScoreTmp);
+                    if(t%100==0)
+                    {
+
+                        printf("\n%d writhe:%lf ene:%6.6e sbu: %d\n",t/100,WritheTmp,ScoreTmp,SinceBestUpdate);
+                    }
                 }
 
-                printf("%d writhe:%lf ene:%4.3e global:%4.3e\n",t,wr::writhe(resample(c,WrithePoints)),Score,GlobalBestScore);
-
-                if(Score < GlobalBestScore)
+                //Find centroid of all but worst point
+                wr::Curve Centroid(ParamPoints);
+                for(int i=0;i<SimplexSize-1;i++)
                 {
-                    GlobalBestC = ProposeC;
-                    GlobalBestScore = Score;
-                    WinnerWr.push_back(wr::writhe(resample(GlobalBestC,WrithePoints)));
-                    WinnerScores.push_back(GlobalBestScore);
-                    c = ProposeC;
+                    Centroid = wr::add( Centroid , wr::scale( Simplex[i].first , 1.0 / (SimplexSize-1) ) );
+                }
+
+                // x_r = x_o + \alpha ( x_0 - x_{n+1} )
+                wr::Curve Reflection;
+                Reflection = wr::add ( Centroid , wr::scale( wr::add( Centroid , wr::scale( Simplex[SimplexSize-1].first , -1) ) , alpha ) );  
+                double ScoreReflected = wr::energy(Reflection,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+
+                // f(x_1) <= f(x_r) < f(x_n)
+                if(Simplex[0].second <= ScoreReflected && ScoreReflected < Simplex[SimplexSize-2].second)
+                {
+                    Simplex[SimplexSize-1] = std::make_pair(Reflection,ScoreReflected);
+                    if(input.cmdOptionExists("-v"))printf("r");
+                    continue; // next iteration of Nelder-Mead
+                }
+
+                if(ScoreReflected < Simplex[0].second)
+                {
+                    //Expansion
+                    wr::Curve Expansion;
+                    Expansion = wr::add( Centroid , wr::scale( wr::add( Reflection, wr::scale( Centroid , -1)) , gamma) );
+                    double ScoreExpanded = wr::energy(Expansion,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+
+                    if(ScoreExpanded < ScoreReflected)
+                    {
+                        Simplex[SimplexSize-1] = std::make_pair(Expansion,ScoreExpanded);
+                        if(input.cmdOptionExists("-v"))printf("e");
+                        continue; // next iteration of Nelder-Mead
+                    }
+                    else
+                    {
+                        Simplex[SimplexSize-1] = std::make_pair(Reflection,ScoreReflected);
+                        if(input.cmdOptionExists("-v"))printf("q");
+                        continue; // next iteration of Nelder-Mead
+                    }
+                }
+                else
+                {
+                    //Contraction
+                    wr::Curve Contraction;
+                    Contraction = wr::add( Centroid, wr::scale( wr::add( Simplex[SimplexSize-1].first , wr::scale( Centroid , -1) ) , rho));
+                    double ScoreContracted = wr::energy(Contraction,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+
+                    if(ScoreContracted < Simplex[SimplexSize-1].second)
+                    {
+                        Simplex[SimplexSize-1] = std::make_pair( Contraction, ScoreContracted);
+                        if(input.cmdOptionExists("-v"))printf("c");
+                        continue; // next iteration of Nelder-Mead
+                    }
+                    else
+                    {
+                        //Shrink
+                        for(int i=1;i<SimplexSize;i++)
+                        {
+                            wr::Curve tmp;
+                            tmp = wr::add( Simplex[0].first , wr::scale( wr::add(Simplex[i].first,wr::scale(Simplex[0].first,-1))  ,sigma));
+                            double ShrinkScore = wr::energy(tmp,ParamLink,ParamRadius,ParamLength,ParamOmega,0,0);
+                            Simplex[i] = std::make_pair(tmp,ShrinkScore);
+                        }
+                        printf("s");
+                        continue;
+                    }
+
                 }
             }
 
@@ -132,7 +278,7 @@ int main(int argc, char **argv)
 
             j["writhes"] = WinnerWr;
             j["scores"]  = WinnerScores;
-            j["winner"] = GlobalBestC;
+            j["winner"] = Simplex[0].first;
             j["movie"] = MovieFrames;
 
             std::cout<<j["writhes"]<<std::endl;
