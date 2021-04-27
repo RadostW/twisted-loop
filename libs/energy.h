@@ -1,228 +1,78 @@
+// Copyright (c) Radost Waszkiewicz - 2021
+// This code is lincensed under MIT license
+// Computes energy of twisted, bent loop of dna
+// With energy density consisting of 5 parts
+// 1. Length penalty (E = large*(L - L_0)^2)
+// 2. Steric interactions (E = large*(intersection_length))
+// 3. Bending energy (dE = EI * \kappa^2 ds)
+// 4. Twisting energy (dE = \omega EI * \Omega^2 ds)
+// 5. Electrostatic interaction (dE = const * exp(-\lambda distance) / distance)
+
 #ifndef ENERGY_H
 #define ENERGY_H
 
-#include "randompts.h"
-#include "simpsons.h"
+#include<cmath> // M_PI
+#include"spline_utils.h" // TotalCurvature, NearNeighbours, DebeyeEnergy
+#include"splines.h" // Spline
+#include"points.h" // Curve
+#include<vector> // std::vector
 
-namespace wr
+namespace lp
 {
-
-    sp::spline gammaX, gammaY, gammaZ;
-    wr::Curve wrSplineCurve;
-    const int wrpoints = 200; // Number of subsampling points for writhe calc.
-
-    wr::Curve nearSplineCurve;
-    int nearSamplingN = 1000; // Number of subsampling points for steric interactions
-
-    int splinePoints; // Stores number of points of initCurve
-
-    double dl(double s);
-
-    void curveInit(const wr::Curve& initCurve)
+    class Loop
     {
-        int n = initCurve.size();
-        splinePoints = n;
-        std::vector<double> xi(n),yi(n),zi(n);
-        for(int i=0;i<n;i++)
-        {
-            xi[i] = initCurve.at(i).x;
-            yi[i] = initCurve.at(i).y;
-            zi[i] = initCurve.at(i).z;
-        }
-        gammaX.setPoints(xi);
-        gammaY.setPoints(yi);
-        gammaZ.setPoints(zi);
-
-        wrSplineCurve = wr::Curve(wrpoints);
-        double wrdx = 1.0/wrpoints;
-        for(int i=0; i < wrpoints; i++)
-        {
-            wrSplineCurve.at(i) = wr::Point(gammaX(wrdx*i),gammaY(wrdx*i),gammaZ(wrdx*i));
-        }
-
-        nearSplineCurve = wr::Curve(nearSamplingN);
-        double nedx = 1.0/nearSamplingN;
-        for(int i=0; i < nearSamplingN; i++)
-        {
-            nearSplineCurve.at(i) = wr::Point(gammaX(nedx*i),gammaY(nedx*i),gammaZ(nedx*i));
-        }
-
-        return;
-    }
-
-    // Remember to run curveInit for each curve.
-    double curvature(double s)
-    {
-        wr::Point gammaPrime(gammaX.prime(s),gammaY.prime(s),gammaZ.prime(s));
-        wr::Point gammaBis(gammaX.bis(s),gammaY.bis(s),gammaZ.bis(s));
-        return (gammaPrime^gammaBis).Norm()/pow(gammaPrime.Norm(),3);
-    }
-
-    // Remember to run curveInit for each curve.
-    double writhe()
-    {
-        wr::writhe(wrSplineCurve);
-    }
-
-    double nearNeighbours(double near)
-    {
-        std::vector<double> arccoords(nearSamplingN);
-        for(int i=1; i < nearSamplingN; i++)
-        {
-            arccoords[i] = arccoords[i-1] + (nearSplineCurve[i] - nearSplineCurve[i-1]).Norm();
-        }
-
-        double accum = 0;
-        for(int i=0; i<nearSamplingN; i++)
-        {
-            wr::Point r2 = nearSplineCurve[(nearSamplingN+i)%nearSamplingN];
-            for(int j=0; j<nearSamplingN; j++)
+        public:
+            sp::Spline sx;
+            sp::Spline sy;
+            sp::Spline sz;
+            Loop(pt::Curve c)
             {
-                wr::Point r5 = nearSplineCurve[(nearSamplingN+j)%nearSamplingN];
-
-                if((r5-r2).Norm() < near && 
-                        fmod(arccoords[i] - arccoords[j]+arccoords[nearSamplingN-1],arccoords[nearSamplingN-1]) > 0.501*M_PI * near &&
-                        fmod(arccoords[j] - arccoords[i]+arccoords[nearSamplingN-1],arccoords[nearSamplingN-1]) > 0.501*M_PI * near
-                )
+                cx = std::vector<double>(c.size());
+                cy = std::vector<double>(c.size());
+                cz = std::vector<double>(c.size());
+    
+                for(int i=0;i<c.size();i++)
                 {
-                    accum += 0.5*fmod(2*arccoords[nearSamplingN-1] + arccoords[(nearSamplingN+i+1)%nearSamplingN] - arccoords[(nearSamplingN+i-1)%nearSamplingN],arccoords[nearSamplingN-1]);
-                    //printf("near");
-                    break;
+                    cx[i] = c[i].x;
+                    cy[i] = c[i].y;
+                    cz[i] = c[i].z;
                 }
+
+                sx.SetPoints(cx);
+                sy.SetPoints(cy);
+                sz.SetPoints(cz);
             }
-        }
-        return accum;
+        private:
+            std::vector<double> cx;
+            std::vector<double> cy;
+            std::vector<double> cz;
 
-    }
+    };
 
-    double squaredCurvature(double s)
+    double LoopEnergy(Loop loop, 
+                         double Lk, // Linking number
+                         double omega, // Twisting to bending coef. ratio
+                         double ElectroElasticNumber, // (N^2 q^2 / EI 4 \pi \epsilon)
+                         int BasePairs,
+                         double DebeyeLength, // Screening length for electrostatics
+                         double StericPenalty,
+                         double StericDiameter, // [multiples of beam length]
+                         double LengthPenalty)
     {
-        double tmp = curvature(s);
-        return tmp*tmp;
-    }
+        double Tw = Lk - sp::Writhe(loop.sx,loop.sy,loop.sz);
+        double Omega = 2*M_PI*Tw;
+        double Length =  sp::Length(loop.sx,loop.sy,loop.sz);
+        double SquaredCurvatureIntegral = sp::TotalCurvature(loop.sx,loop.sy,loop.sz);
+        double IntersectionLength = sp::NearNeighbours(loop.sx,loop.sy,loop.sz,StericDiameter);
+        double DebeyeEnergy = sp::DebeyeEnergy(loop.sx,loop.sy,loop.sz,DebeyeLength,BasePairs);
 
-    double dl(double s)
-    {
-        wr::Point gammaPrime(gammaX.prime(s),gammaY.prime(s),gammaZ.prime(s));
-        return gammaPrime.Norm();
-    }
-
-    double squaredCurvatureIntegrand(double s)
-    {
-        return squaredCurvature(s)*dl(s);
-    }
-
-    // Remember to run curveInit for each curve
-    double totalSquaredCurvature()
-    {
-        double accum = 0;
-        int n = splinePoints;
-        double dx = 1.0/n;
-        for(int i=0;i<n;i++)
-        {
-            accum += si::adaptiveSimpsons(squaredCurvatureIntegrand,i*dx,(i+1)*dx, 0.0001, 10);
-        }
-        return accum;
-    }
-
-    // Remember to run curveInit for each curve
-    double totalLength()
-    {
-        return si::adaptiveSimpsons(dl,0,1, 0.0001, 10);
-    }
-
-    double inverseDistances()
-    {
-        double accum = 0;
-        int n = wrpoints;
-        for(int i=0;i<n;i++)for(int j=i+1;j<n;j++)
-        {
-            accum += 1.0 / (0.1+(wrSplineCurve[i]-wrSplineCurve[j]).Norm());
-        }
-        return accum;
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    double energy(Curve c,double Link,double Radius,double Length,double Omega,double Electrostatic,double SoftContact)
-    {
-        curveInit(c);
-        double curveLength = totalLength();
-        double squaredCurvature = totalSquaredCurvature();
-        double Tw = Link - writhe();
-        double TwistDensity = 2*M_PI*Tw / curveLength;
-        double contact = nearNeighbours(2*Radius);
-        double softContact = 0; //nearNeighbours(5*Radius);
-        double inverseDist = inverseDistances();
-
-        double lengthPenalty = 8000;
-        double contactPenalty = 10000;
-
-        return lengthPenalty*(curveLength-Length)*(curveLength-Length) + squaredCurvature + 
-                curveLength*TwistDensity*TwistDensity*Omega + contactPenalty*contact +
-                Electrostatic * inverseDist + softContact*SoftContact;
-    }
-
-    Curve symmetrized(Curve c);
-    Curve nudge(Curve c,double ammount)
-    {
-        Curve tmp(c);
-        int n = c.size();
-        for(int i=0;i<n;i++)
-        {
-                tmp[i] = tmp[i]+GetSphericalNormal()*ammount;
-        }
-        return symmetrized(tmp);
-    }
-
-
-    Curve symmetrized(Curve c)
-    {
-        Curve phase1(c);
-        int n = phase1.size();
-        for(int i=0; i<n; i++)
-        {
-            Point l = c[i];
-            Point r = c[(n-i)%n];
-            phase1[i] = wr::Point( 0.5*(l.x-r.x), 0.5*(l.y-r.y), 0.5*(l.z+r.z) );
-        }
-        if(n%2!=0)
-        {
-            return phase1;
-        }
-        else
-        {
-            Curve phase2(phase1);
-            for(int i=0; i<n; i++)
-            {
-                Point l = phase1[i];
-                Point r = phase1[(n-i+(n/2))%n];
-                phase2[i] = wr::Point( 0.5*(l.x+r.x), 0.5*(l.y-r.y), 0.5*(l.z-r.z) );
-            }
-            return phase2;
-        }
+        return LengthPenalty*(Length - 1)*(Length - 1) 
+               + StericPenalty * IntersectionLength
+               + SquaredCurvatureIntegral
+               + omega*Tw*Tw 
+               + ElectroElasticNumber * DebeyeEnergy;
     }
 
 }
 
-#endif /* ENERGY_H */
-
+#endif
