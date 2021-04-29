@@ -15,7 +15,34 @@ namespace sp
     const double INTEGRATION_PRECISION = 0.0001; // Smaller -> more accurate
     const int MAX_INTEGRATION_RECURSION = 10; // Larger -> more accurate
     const int WRITHE_DISCRETIZATION_POINTS = 200; // Larger -> more accurate
-    const double NEAR_NEIGHBOURS_RESOLUTION = 0.1; // Smaller -> more accurate
+    const double NEAR_NEIGHBOURS_RESOLUTION = 0.05; // Smaller -> more accurate
+
+    // Return curve with different number of nodes
+    pt::Curve Resample(pt::Curve c, int points)
+    {
+        int n = c.size();
+        std::vector<double> xi(n),yi(n),zi(n);
+        for(int i=0;i<n;i++)
+        {
+            xi[i] = c.at(i).x;
+            yi[i] = c.at(i).y;
+            zi[i] = c.at(i).z;
+        }
+
+        Spline gammaX, gammaY, gammaZ;
+        gammaX.SetPoints(xi);
+        gammaY.SetPoints(yi);
+        gammaZ.SetPoints(zi);
+
+        pt::Curve ret(points);
+        double ds = 1.0 / points;
+        for(int i=0;i<points;i++)
+        {
+            ret.at(i) = pt::Point(gammaX(ds*i),gammaY(ds*i),gammaZ(ds*i));
+        }
+        return ret;
+    }
+
 
     // Hacked to get pure function pointer to Simpsons integrator
     const Spline* _globalx;
@@ -43,7 +70,9 @@ namespace sp
     {
         pt::Point gammaPrime(_globalx->prime(s),_globaly->prime(s),_globalz->prime(s));
         pt::Point gammaBis(_globalx->bis(s),_globaly->bis(s),_globalz->bis(s));
-        return (gammaPrime^gammaBis).Norm()/pow(gammaPrime.Norm(),3);        
+        double curvature = (gammaPrime^gammaBis).Norm()/pow(gammaPrime.Norm(),3);
+        double dl = gammaPrime.Norm();
+        return curvature*curvature*dl;        
     }
 
     double TotalCurvature(const Spline &x, const Spline &y, const Spline &z)
@@ -78,7 +107,7 @@ namespace sp
 
     double NearNeighbours(const Spline &x, const Spline &y, const Spline &z, double Near)
     {
-        int points = NEAR_NEIGHBOURS_RESOLUTION * 1.0 / Near;
+        int points = 1.0 / (NEAR_NEIGHBOURS_RESOLUTION*Near);
         pt::Curve discretized(points);
         double ds = 1.0 / points;
         for(int i=0;i<points;i++)

@@ -12,9 +12,10 @@
 #define ENERGY_H
 
 #include<cmath> // M_PI
-#include"spline_utils.h" // TotalCurvature, NearNeighbours, DebeyeEnergy
 #include"splines.h" // Spline
 #include"points.h" // Curve
+#include"spline_utils.h" // TotalCurvature, NearNeighbours, DebeyeEnergy
+#include"point_utils.h" // Spherical normal
 #include<vector> // std::vector
 
 namespace lp
@@ -41,15 +42,57 @@ namespace lp
                 sx.SetPoints(cx);
                 sy.SetPoints(cy);
                 sz.SetPoints(cz);
+                ini = c;
+            }
+            Loop Copy()
+            {
+                return Loop(this->ini);
+            }
+            
+            void Nudge(double dx)
+            {
+                // Apply a small random change to all interpolation nodes of the loop
+                auto c = pt::Curve(ini);
+                for(int i=0;i<c.size();i++)
+                {
+                    c[i] = c[i] + pt::GetSphericalNormal() * dx;
+                }
+                c = pt::Symmetrized(c);
+
+                cx = std::vector<double>(c.size());
+                cy = std::vector<double>(c.size());
+                cz = std::vector<double>(c.size());
+    
+                for(int i=0;i<c.size();i++)
+                {
+                    cx[i] = c[i].x;
+                    cy[i] = c[i].y;
+                    cz[i] = c[i].z;
+                }
+
+                sx.SetPoints(cx);
+                sy.SetPoints(cy);
+                sz.SetPoints(cz);
+                ini = c;
+
+            }
+            pt::Curve GetNodes()
+            {
+                return ini;
+            }
+            pt::Curve GetShape()
+            {
+                return sp::Resample(ini,100);
             }
         private:
+            pt::Curve ini;
             std::vector<double> cx;
             std::vector<double> cy;
             std::vector<double> cz;
 
     };
 
-    double LoopEnergy(Loop loop, 
+    double LoopEnergy(const Loop &loop, 
                          double Lk, // Linking number
                          double omega, // Twisting to bending coef. ratio
                          double ElectroElasticNumber, // (N^2 q^2 / EI 4 \pi \epsilon)
@@ -66,10 +109,19 @@ namespace lp
         double IntersectionLength = sp::NearNeighbours(loop.sx,loop.sy,loop.sz,StericDiameter);
         double DebeyeEnergy = sp::DebeyeEnergy(loop.sx,loop.sy,loop.sz,DebeyeLength,BasePairs);
 
+        //printf("Energy components:\n");
+        //printf("len: %lf, ste: %lf, cur: %lf, twi: %lf, ele: %lf\n",
+        //    LengthPenalty*(Length - 1)*(Length - 1),
+        //    StericPenalty * IntersectionLength,
+        //    SquaredCurvatureIntegral,
+        //    omega*Tw*Tw,
+        //    ElectroElasticNumber * DebeyeEnergy
+        //);
+
         return LengthPenalty*(Length - 1)*(Length - 1) 
                + StericPenalty * IntersectionLength
                + SquaredCurvatureIntegral
-               + omega*Tw*Tw 
+               + omega*4*M_PI*M_PI*Tw*Tw 
                + ElectroElasticNumber * DebeyeEnergy;
     }
 

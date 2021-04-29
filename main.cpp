@@ -1,4 +1,7 @@
 #include<stdio.h> // printf
+#include<string> // string
+#include<fstream> // std::ofstrem
+
 #include"external/args_parser.h" // parsing commandline args
 #include"external/json.h" // parsing jsons
 
@@ -6,19 +9,23 @@
 #include"libs/splines.h" // Spline
 #include"libs/energy.h" // Energy of loop
 
-#include"constants/ini.h" // getInitialCondition()
+#include"constants/ini.h" // GetInitialCondition()
 
 using json = nlohmann::json; // convenience
-void to_json(json& j, const Point& p)
+namespace pt
+{
+void to_json(json& j, const pt::Point& p)
 {
     std::vector<double> tmp {p.x,p.y,p.z};
     j =  json(tmp);
 }
+}
+
 double OptionElseDouble(InputParser input, const std::string &option,double def)
 {
     return input.cmdOptionExists(option) ? atof(input.getCmdOption(option).c_str()) : def;
 }
-std::string OptionElseString(InputParser input, const std::string &option,const std::string &option def)
+std::string OptionElseString(InputParser input, const std::string &option,const std::string &def)
 {
     return input.cmdOptionExists(option) ? input.getCmdOption(option) : def;
 }
@@ -47,15 +54,98 @@ int main(int argc, char **argv)
     }
     else
     {      
-        double ParamLink = OptionElseDouble(input, "-L", 3.5);
-        double ParamRadius = OptionElseDouble(input, "-d", 20.0 / (3.34*336.0));
-        double ParamElaEleNum = OptionElseDouble(input, "-E", 300.0);
-        double ParamDebeyeLength = OptionElseDouble(input, "-K", 30.0 / (3.34*336.0));
+        double ParamLk = OptionElseDouble(input, "-L", 3.5);
+        double ParamDiameter = OptionElseDouble(input, "-d", 20.0 / (3.34*336.0));
+        double ParamElaEleNum = OptionElseDouble(input, "-E", 50.0);
+        double ParamDebeyeLength = OptionElseDouble(input, "-K", 5.0 / (3.34*336.0));
         int ParamBasePairs = OptionElseDouble(input, "-B", 336);
         double ParamOmega = OptionElseDouble(input, "-omega", 2.0/3.0);
         int ParamPoints = OptionElseDouble(input, "-pts", 14);
         int ParamTMax = OptionElseDouble(input, "-tmax", 5000);
         std::string ParamOutpath = OptionElseString(input, "-o", "out.json");
+        double ParamStericPenalty = 100000;
+        double ParamLengthPenalty = 500000;
+
+        std::vector<pt::Curve> MovieFrames;
+
+        pt::Curve c;
+        // Start with sensible guess
+        for(double s=0;s<2*M_PI;s+=0.05)
+        {
+            pt::Point tmp = pt::Point(0.2*sin(s),-0.05*sin(2*s),-0.02*cos(s));
+            c.push_back( tmp );
+        }
+        //c = pt::GetInitialCondition(3.5);
+        c = sp::Resample(c, ParamPoints);
+        c = pt::Symmetrized(c);
+
+        lp::Loop loop = lp::Loop(c);
+
+        MovieFrames.push_back(loop.GetShape());
+
+        double MinimalEnergy = lp::LoopEnergy(loop,ParamLk,ParamOmega,
+                                          ParamElaEleNum,ParamBasePairs,ParamDebeyeLength,
+                                          ParamStericPenalty,ParamDiameter,
+                                          ParamLengthPenalty);
+
+        for(int t=0;t<ParamTMax;t++)
+        {
+            auto tmp = loop.Copy();
+            double TimeScale = cbrt(1.0*(ParamTMax-t)/(1.0*ParamTMax));
+            tmp.Nudge(0.05*TimeScale*ParamDiameter);
+            auto tmpenergy = lp::LoopEnergy(tmp,ParamLk,ParamOmega,
+                                          ParamElaEleNum,ParamBasePairs,ParamDebeyeLength,
+                                          ParamStericPenalty,ParamDiameter,
+                                          ParamLengthPenalty);
+            if(t%2000==0)
+            {
+                printf("%6d: %2.3E %3.2lf %3.2lf %3.2lf\n",
+                           t,
+                           MinimalEnergy,
+                           sp::Writhe(loop.sx,loop.sy,loop.sz),
+                           sp::NearNeighbours(loop.sx,loop.sy,loop.sz,ParamDiameter),
+                           sp::Length(loop.sx,loop.sy,loop.sz)
+                        );
+            }
+            if(tmpenergy < MinimalEnergy)
+            {
+                printf("%6d: %2.3E %3.2lf %3.2lf %3.2lf\n",
+                           t,
+                           MinimalEnergy,
+                           sp::Writhe(loop.sx,loop.sy,loop.sz),
+                           sp::NearNeighbours(loop.sx,loop.sy,loop.sz,ParamDiameter),
+                           sp::Length(loop.sx,loop.sy,loop.sz)
+                        );
+                MovieFrames.push_back(loop.GetShape());
+
+                loop = tmp.Copy();
+                MinimalEnergy = tmpenergy;
+
+            }
+            else
+            {
+                //printf("%d: %lf %lf\n",t,MinimalEnergy,tmpenergy);
+            }
+        }
+
+        json j;
+        j["Lk"] = ParamLk;
+        j["Diameter"] = ParamDiameter;
+        j["ElastoElectroNumber"] = ParamElaEleNum;
+        j["DebyeLength"] = ParamDebeyeLength;
+        j["BasePairs"] = ParamBasePairs;
+        j["Omega"] = ParamOmega;
+        j["TMax"] = ParamTMax;
+        j["StericPenalty"] = ParamStericPenalty;
+        j["LengthPenalty"] = ParamLengthPenalty;
+
+        j["movie"] = MovieFrames;
+
+        std::ofstream myfile;
+        myfile.open (ParamOutpath);
+        myfile << j;
+        myfile.close();
+
     }
 
 }

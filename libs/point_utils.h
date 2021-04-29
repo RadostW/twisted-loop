@@ -5,12 +5,88 @@
 #define POINT_UTILS_H
 
 #include"points.h" // Point, Curve
+#include<random> // Normal distribution
 
 namespace pt
 {
+
+    std::default_random_engine generator;
+    std::normal_distribution<double> distribution(0.0,1.0);
+
+    double GetNormal()
+    {
+      return distribution(generator);
+    }
+
+    Point GetSpherical()
+    {
+      auto p = Point();
+      while(p.Norm() < 0.0001)
+      {
+        p.x = GetNormal();
+        p.y = GetNormal();
+        p.z = GetNormal();
+      }
+      return p.Normalized();
+    }
+
+    Point GetSphericalNormal()
+    {
+        auto p = Point();
+        p.x = GetNormal();
+        p.y = GetNormal();
+        p.z = GetNormal();
+        return p;
+    }
+
+    Curve Symmetrized(Curve c)
+    {
+        Curve phase1(c);
+        int n = phase1.size();
+        for(int i=0; i<n; i++)
+        {
+            pt::Point l = c[i];
+            pt::Point r = c[(n-i)%n];
+            phase1[i] = pt::Point( 0.5*(l.x-r.x), 0.5*(l.y-r.y), 0.5*(l.z+r.z) );
+        }
+        if(n%2!=0)
+        {
+            return phase1;
+        }
+        else
+        {
+            Curve phase2(phase1);
+            for(int i=0; i<n; i++)
+            {
+                pt::Point l = phase1[i];
+                pt::Point r = phase1[(n-i+(n/2))%n];
+                phase2[i] = pt::Point( 0.5*(l.x+r.x), 0.5*(l.y-r.y), 0.5*(l.z-r.z) );
+            }
+            return phase2;
+        }
+    }
+
     double DebeyeEnergyDiscretized(Curve discretized, double DebeyeLength)
     {
-        return 0;
+        double accum = 0;
+        int n = discretized.size();
+        for(int i=0;i<n;i++)
+        {
+            for(int j=0;j<i;j++)
+            {
+                double d = (discretized[i] - discretized[j]).Norm();
+                if(d != 0)
+                {
+                    // (1.0 / n) adjustment to decrease constant term
+                    accum += (1.0 / (n*n-1))*((1.0  / d)*exp(-d/DebeyeLength) - (1.0 / n));
+                }
+                else
+                {
+                    accum += 1000.0;
+                }
+            }
+        }
+        return accum;
     }
 
     // Based on algorithm:
@@ -96,7 +172,9 @@ namespace pt
             {
                 Point r = discretized[j];
 
-                if( (l-r).Norm() < Near
+                double distance = (l-r).Norm();
+
+                if( distance < Near
                   && fmod(arccoords[i]-arccoords[j]+arccoords[len-1], arccoords[len-1]) > 0.501*M_PI * Near 
                   && fmod(arccoords[j]-arccoords[i]+arccoords[len-1], arccoords[len-1]) > 0.501*M_PI * Near)
                 {
