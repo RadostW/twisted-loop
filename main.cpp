@@ -70,13 +70,24 @@ int main(int argc, char **argv)
 
         pt::Curve c;
         // Start with sensible guess
-        for(double s=0;s<2*M_PI;s+=0.01)
+        for(double s=-M_PI;s<M_PI;s+=0.01)
         {
             // pt::Point tmp = pt::Point(0.2*sin(s),-0.05*sin(2*s),-0.02*cos(s)); //Old initial guess
-            pt::Point tmp = pt::Point(
-                                0.194*sin(s) - 0.022*sin(3*s) - 0.002*sin(5*s),
-                                0.0146*sin(2*s) - 0.013*sin(4*s),
-                                0.0186*cos(s) - 0.0268*cos(3*s));
+            // pt::Point tmp = pt::Point(
+            //                    0.194*sin(s) - 0.022*sin(3*s) - 0.002*sin(5*s),
+            //                    0.0146*sin(2*s) - 0.013*sin(4*s),
+            //                    0.0186*cos(s) - 0.0268*cos(3*s));
+            //pt::Point tmp = pt::Point(
+            //                    0.2*sin(s) - 0.0177*sin(3*s) - 0.0008*sin(5*s),
+            //                    0.025*sin(2*s) - 0.01873*sin(4*s) - 0.0028*sin(6*s) + 
+            //                    0.0009*sin(8*s),-0.003486*cos(s) + 0.0066566*cos(3*s) - 
+            //                    0.0057575*cos(5*s) - 0.0026587*cos(7*s));
+            double q = -6; // has to be even int
+            pt::Point tmp = pt::Point( 
+                                0.2*sin(s) - 0.02*sin(3*s),
+                                -ParamDiameter*sin(q*s),
+                                -ParamDiameter*cos(q*s)*tanh(q*(-M_PI/2. + s))*tanh(q*(M_PI/2. + s))
+                                );
             c.push_back( tmp );
         }
         //c = pt::GetInitialCondition(3.5);

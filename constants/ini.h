@@ -7,7 +7,7 @@ pt::Curve GetInitialCondition(double link)
 {
     auto c = pt::Curve(15);
 
-    bool HighWrInit = false;
+    bool HighWrInit = true;
     bool LowWrInit = false;
 
     if(HighWrInit) // High writhe init
