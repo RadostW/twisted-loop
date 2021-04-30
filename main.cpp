@@ -155,6 +155,8 @@ int main(int argc, char **argv)
         j["StericPenalty"] = ParamStericPenalty;
         j["LengthPenalty"] = ParamLengthPenalty;
 
+        j["Wr"] = sp::Writhe(loop.sx,loop.sy,loop.sz);
+
         j["movie"] = MovieFrames;
 
         std::ofstream myfile;
